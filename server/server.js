@@ -18,8 +18,8 @@ const startServer = async () => {
   // Initialize VAPID keys for push notifications
   initVapid();
 
-  // Start HTTP server
-  const server = app.listen(PORT, () => {
+  // Start HTTP server (bind to 0.0.0.0 for Render compatibility)
+  const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info(`🚀 Pranadatha API running on port ${PORT}`);
     logger.info(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`🌐 API: http://localhost:${PORT}/api`);
