@@ -20,9 +20,27 @@ const startServer = async () => {
 
   // Start HTTP server
   const server = app.listen(PORT, () => {
-    logger.info(`🚀 Blood Donor Finder API running on port ${PORT}`);
+    logger.info(`🚀 Pranadatha API running on port ${PORT}`);
     logger.info(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`🌐 API: http://localhost:${PORT}/api`);
+
+    // ── Keep-alive ping (prevents Render free tier sleep) ─────────────────
+    // Only active in production. Pings /api/health every 3 minutes.
+    if (process.env.NODE_ENV === 'production') {
+      const https = require('https');
+      const PING_URL = 'https://pranadathabackend.onrender.com/api/health';
+      const PING_INTERVAL = 2 * 60 * 1000; // 3 minutes
+
+      setInterval(() => {
+        https.get(PING_URL, (res) => {
+          logger.info(`🏓 Keep-alive ping → ${res.statusCode}`);
+        }).on('error', (err) => {
+          logger.warn(`🏓 Keep-alive ping failed: ${err.message}`);
+        });
+      }, PING_INTERVAL);
+
+      logger.info(`🏓 Keep-alive ping active (every 3 min) → ${PING_URL}`);
+    }
   });
 
   // Graceful shutdown handlers
