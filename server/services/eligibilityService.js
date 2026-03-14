@@ -82,7 +82,7 @@ const getBadgeInfo = (level) => {
       icon: '🥉',
       label: 'Bronze Donor',
       color: '#CD7F32',
-      minDonations: 1,
+      minDonations: 0,
       maxDonations: 3,
     },
     silver: {

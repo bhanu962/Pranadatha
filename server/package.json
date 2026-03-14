@@ -1,15 +1,16 @@
 {
-  "name": "blood-donor-finder-server",
+  "name": "pranadatha-server",
   "version": "1.0.0",
-  "description": "Blood Donor Finder REST API - Node.js/Express backend",
+  "description": "Pranadatha — Blood Donor Finder REST API",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "seed": "node scripts/seed.js",
+    "seed:fresh": "node scripts/seed.js --fresh",
+    "clear-db": "node scripts/clear-db.js",
     "test": "jest --runInBand",
-    "test:watch": "jest --watch",
-    "generate-vapid": "node scripts/generateVapid.js",
-    "logs:make": "node -e \"require('fs').mkdirSync('../logs',{recursive:true})\""
+    "generate-vapid": "node scripts/generateVapid.js"
   },
   "keywords": [
     "blood-donation",
@@ -19,7 +20,7 @@
     "pwa",
     "web-push"
   ],
-  "author": "Blood Donor Finder",
+  "author": "Pranadatha",
   "license": "MIT",
   "jest": {
     "testEnvironment": "node",

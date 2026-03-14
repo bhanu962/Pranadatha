@@ -7,6 +7,7 @@ const app = require('./app');
 const connectDB = require('./config/db');
 const { initVapid } = require('./config/vapid');
 const logger = require('./utils/logger');
+const mongoose = require('mongoose');
 
 const PORT = process.env.PORT || 5000;
 
@@ -29,7 +30,7 @@ const startServer = async () => {
     logger.info(`${signal} received. Shutting down gracefully...`);
     server.close(() => {
       logger.info('HTTP server closed.');
-      require('mongoose').connection.close(false, () => {
+      mongoose.connection.close().then(() => {
         logger.info('MongoDB connection closed.');
         process.exit(0);
       });

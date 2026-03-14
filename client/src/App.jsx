@@ -14,6 +14,13 @@ const DonorDashboard = lazy(() => import('./pages/DonorDashboard'))
 const HospitalDashboard = lazy(() => import('./pages/HospitalDashboard'))
 const EmergencyRequest = lazy(() => import('./pages/EmergencyRequest'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'))
+const RequestsPage = lazy(() => import('./pages/RequestsPage'))
+const RequestDetail = lazy(() => import('./pages/RequestDetail'))
+const DonorsPage = lazy(() => import('./pages/DonorsPage'))
+const DonorProfile = lazy(() => import('./pages/DonorProfile'))
+const CampsPage = lazy(() => import('./pages/CampsPage'))
+const CreateCamp = lazy(() => import('./pages/CreateCamp'))
+const LeaderboardPage = lazy(() => import('./pages/LeaderboardPage'))
 
 // Loading spinner
 const PageLoader = () => (
@@ -67,28 +74,41 @@ const AppRoutes = () => {
           <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
           <Route path="/register" element={<GuestRoute><Register /></GuestRoute>} />
 
-          {/* Protected: any role */}
+          {/* Public browsing pages */}
+          <Route path="/requests" element={<RequestsPage />} />
+          <Route path="/requests/:id" element={<RequestDetail />} />
+          <Route path="/donors" element={<DonorsPage />} />
+          <Route path="/donors/:id" element={<DonorProfile />} />
+          <Route path="/camps" element={<CampsPage />} />
+          <Route path="/camps/create" element={
+            <ProtectedRoute roles={['hospital', 'admin']}>
+              <CreateCamp />
+            </ProtectedRoute>
+          } />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
+
+          {/* Emergency request creation: patient, hospital, admin */}
           <Route path="/emergency-request" element={
             <ProtectedRoute roles={['patient', 'hospital', 'admin']}>
               <EmergencyRequest />
             </ProtectedRoute>
           } />
 
-          {/* Donor */}
+          {/* Donor dashboard */}
           <Route path="/donor-dashboard" element={
             <ProtectedRoute roles={['donor']}>
               <DonorDashboard />
             </ProtectedRoute>
           } />
 
-          {/* Hospital */}
+          {/* Hospital dashboard */}
           <Route path="/hospital-dashboard" element={
             <ProtectedRoute roles={['hospital', 'admin']}>
               <HospitalDashboard />
             </ProtectedRoute>
           } />
 
-          {/* Admin */}
+          {/* Admin dashboard */}
           <Route path="/admin" element={
             <ProtectedRoute roles={['admin']}>
               <AdminDashboard />

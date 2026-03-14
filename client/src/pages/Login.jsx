@@ -83,10 +83,11 @@ export default function Login() {
           </div>
         </form>
 
-        {/* Demo accounts notice */}
         <div className="mt-4 p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-500">
-          <p className="font-medium text-slate-400 mb-1">🧪 Demo accounts (after setup):</p>
+          <p className="font-medium text-slate-400 mb-1">🧪 Demo accounts:</p>
           <p>Admin: admin@bloodfinder.app / admin123456</p>
+          <p>Donor: arjun@donor.com / donor1234</p>
+          <p>Hospital: apollo@hospital.com / hospital1234</p>
         </div>
       </div>
     </div>

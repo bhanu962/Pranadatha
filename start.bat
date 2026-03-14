@@ -1,9 +1,10 @@
 @echo off
 title Blood Donor Finder
+color 0C
 
 echo.
 echo  ==========================================
-echo   🩸  Blood Donor Finder — Starting Up
+echo   Blood Donor Finder - Starting Up
 echo  ==========================================
 echo.
 
@@ -15,63 +16,77 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM ── Resolve project root (directory of this .bat file) ───────────────────
-set "ROOT=%~dp0blood-donor-finder"
+REM ── Resolve project root ──────────────────────────────────────────────────
+set "ROOT=%~dp0"
+if "%ROOT:~-1%"=="\" set "ROOT=%ROOT:~0,-1%"
+
 set "SERVER=%ROOT%\server"
 set "CLIENT=%ROOT%\client"
 
+echo  Project root : %ROOT%
+echo.
+
 REM ── Verify folders exist ──────────────────────────────────────────────────
 if not exist "%SERVER%\server.js" (
-    echo  [ERROR] server\server.js not found. Check your project structure.
+    echo  [ERROR] server\server.js not found at: %SERVER%
     pause
     exit /b 1
 )
 if not exist "%CLIENT%\package.json" (
-    echo  [ERROR] client\package.json not found. Check your project structure.
+    echo  [ERROR] client\package.json not found at: %CLIENT%
     pause
     exit /b 1
 )
 
-REM ── Install deps if node_modules missing ─────────────────────────────────
+REM ── Check .env exists ─────────────────────────────────────────────────────
+if not exist "%SERVER%\.env" (
+    echo  [WARNING] server\.env not found - server may crash without secrets!
+    echo.
+)
+
+REM ── Install deps if node_modules missing ──────────────────────────────────
 if not exist "%SERVER%\node_modules" (
     echo  [INFO] Installing server dependencies...
-    pushd "%SERVER%"
+    cd /d "%SERVER%"
     call npm install
-    popd
+    echo.
 )
 if not exist "%CLIENT%\node_modules" (
     echo  [INFO] Installing client dependencies...
-    pushd "%CLIENT%"
+    cd /d "%CLIENT%"
     call npm install
-    popd
+    echo.
 )
 
-REM ── Launch Backend in a new window ────────────────────────────────────────
-echo  [1/2] Starting Backend API on http://localhost:5000 ...
-start "BDF - Backend (API)" cmd /k "cd /d "%SERVER%" && npm run dev"
+REM ── Return to root ────────────────────────────────────────────────────────
+cd /d "%ROOT%"
 
-REM ── Short delay to let backend connect to MongoDB first ──────────────────
-timeout /t 3 /nobreak >nul
+REM ── Launch Backend ─────────────────────────────────────────────────────────
+echo  [1/2] Starting Backend API  ->  http://localhost:5000 ...
+start "BDF - Backend" cmd /k "color 0A & title BDF - Backend & cd /d %SERVER% & npm run dev"
 
-REM ── Launch Frontend in a new window ──────────────────────────────────────
-echo  [2/2] Starting Frontend on http://localhost:5173 ...
-start "BDF - Frontend (Vite)" cmd /k "cd /d "%CLIENT%" && npm run dev"
+REM ── Wait for MongoDB connection ────────────────────────────────────────────
+echo  [...] Waiting for backend to connect to MongoDB...
+timeout /t 4 /nobreak >nul
 
-REM ── Give both servers a moment then open browser ─────────────────────────
+REM ── Launch Frontend ────────────────────────────────────────────────────────
+echo  [2/2] Starting Frontend     ->  http://localhost:5173 ...
+start "BDF - Frontend" cmd /k "color 09 & title BDF - Frontend & cd /d %CLIENT% & npm run dev"
+
+REM ── Open browser after servers come up ─────────────────────────────────────
 timeout /t 5 /nobreak >nul
+
 echo.
 echo  ==========================================
-echo   ✅  Both servers are running!
+echo   Both servers are running!
 echo.
-echo   On this PC:
-echo   Frontend  →  http://localhost:5173
-echo   Backend   →  http://localhost:5000/api/health
+echo   PC Browser  ->  http://localhost:5173
+echo   API Health  ->  http://localhost:5000/api/health
 echo.
-echo   On your phone (same WiFi):
-echo   Frontend  →  http://192.168.31.144:5173
+echo   Phone (WiFi)->  http://192.168.31.144:5173
 echo  ==========================================
 echo.
-echo  Close the individual server windows to stop.
 echo  Press any key to open the app in your browser...
+echo  (Close the individual server windows to stop)
 pause >nul
 start http://localhost:5173

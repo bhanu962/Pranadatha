@@ -48,10 +48,9 @@ const findNearbyDonors = async ({
     isActive: true,
     medicalEligible: true,
     bloodGroup: { $in: eligibleBloodGroups },
-    $or: [
-      { lastDonationDate: { $lt: ninetyDaysAgo } },
-      { lastDonationDate: { $exists: false } },
-    ],
+    // Match donors who either never donated OR donated >90 days ago
+    // Using $not: { $gt: date } correctly handles null, undefined, and old dates
+    lastDonationDate: { $not: { $gt: ninetyDaysAgo } },
     location: {
       $nearSphere: {
         $geometry: {

@@ -1,9 +1,42 @@
+# ── Dependencies ─────────────────────────────────────────────────────────────
 node_modules/
+.pnp
+.pnp.js
+
+# ── Environment variables (NEVER commit secrets) ──────────────────────────────
 .env
-logs/
+.env.local
+.env.*.local
+server/.env
+client/.env
+
+# ── Build output ─────────────────────────────────────────────────────────────
 dist/
-.DS_Store
+build/
+client/dist/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+logs/
 *.log
-vapid-keys.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Testing ───────────────────────────────────────────────────────────────────
 coverage/
 .nyc_output/
+
+# ── OS junk ───────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / Editors ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+vapid-keys.txt
+uploads/

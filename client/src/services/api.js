@@ -45,6 +45,10 @@ export const authApi = {
   updateProfile: (data) => api.put('/auth/update-profile', data),
   changePassword: (data) => api.put('/auth/change-password', data),
   logout: () => api.post('/auth/logout'),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => api.put(`/auth/reset-password/${token}`, { password }),
+  verifyEmail: (token) => api.get(`/auth/verify-email/${token}`),
+  refresh: (refreshToken) => api.post('/auth/refresh', { refreshToken }),
 }
 
 // ── Donor API ─────────────────────────────────────────────────────────────
@@ -92,6 +96,9 @@ export const campApi = {
 export const adminApi = {
   getStats: () => api.get('/admin/stats'),
   getUsers: (params) => api.get('/admin/users', { params }),
+  getUserById: (id) => api.get(`/admin/users/${id}`),
+  updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
+  deleteUser: (id, reason) => api.delete(`/admin/users/${id}`, { data: { reason } }),
   getGeographic: () => api.get('/admin/geographic'),
   toggleUserActive: (id) => api.put(`/admin/users/${id}/toggle-active`),
   moderateRequest: (id, action) => api.put(`/admin/requests/${id}/moderate`, { action }),

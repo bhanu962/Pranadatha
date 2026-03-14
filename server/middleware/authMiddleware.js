@@ -8,15 +8,13 @@ const logger = require('../utils/logger');
 
 const protect = async (req, res, next) => {
   try {
-    // Extract token from header or cookie
+    // Extract token from Authorization header (Bearer <token>)
     let token;
     if (
       req.headers.authorization &&
       req.headers.authorization.startsWith('Bearer ')
     ) {
       token = req.headers.authorization.split(' ')[1];
-    } else if (req.cookies && req.cookies.token) {
-      token = req.cookies.token;
     }
 
     if (!token) {

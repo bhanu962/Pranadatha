@@ -14,23 +14,27 @@ const validate = (req, res, next) => {
   next();
 };
 
-// Public
-router.get('/', getRequests);
+// ─── Static / named segment routes FIRST (before /:id) ────────────────────
 router.get('/nearby', getNearbyRequests);
-router.get('/:id', getRequestById);
+router.get('/user/my-requests', protect, getMyRequests);
 
-// Protected
+// ─── Public list route ─────────────────────────────────────────────────────
+router.get('/', getRequests);
+
+// ─── Create (protected) ───────────────────────────────────────────────────
 router.post('/', protect, authorize('patient', 'hospital', 'admin'), [
-  body('bloodGroup').isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']),
-  body('unitsRequired').isInt({ min: 1, max: 20 }),
-  body('hospitalName').trim().notEmpty(),
-  body('contactPhone').notEmpty(),
-  body('latitude').isFloat(),
-  body('longitude').isFloat(),
+  body('bloodGroup').isIn(['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'])
+    .withMessage('Valid blood group required'),
+  body('unitsRequired').isInt({ min: 1, max: 20 }).withMessage('Units must be 1–20'),
+  body('hospitalName').trim().notEmpty().withMessage('Hospital name required'),
+  body('contactPhone').notEmpty().withMessage('Contact phone required'),
+  body('latitude').isFloat().withMessage('Valid latitude required'),
+  body('longitude').isFloat().withMessage('Valid longitude required'),
   validate,
 ], createRequest);
 
-router.get('/user/my-requests', protect, getMyRequests);
+// ─── Dynamic :id routes LAST ──────────────────────────────────────────────
+router.get('/:id', getRequestById);
 router.put('/:id/respond', protect, authorize('donor'), respondToRequest);
 router.put('/:id/fulfill', protect, fulfillRequest);
 router.delete('/:id', protect, cancelRequest);

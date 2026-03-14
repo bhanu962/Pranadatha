@@ -7,11 +7,24 @@ const Subscription = require('../models/Subscription');
 const logger = require('../utils/logger');
 
 /**
+ * Check if VAPID is configured and web-push is ready to use
+ */
+const isVapidConfigured = () => {
+  return !!(
+    process.env.VAPID_PUBLIC_KEY &&
+    process.env.VAPID_PRIVATE_KEY &&
+    process.env.VAPID_EMAIL
+  );
+};
+
+/**
  * Send a push notification to a single subscription
- * @param {Object} subscription - Subscription document
- * @param {Object} payload - Notification payload
  */
 const sendToSubscription = async (subscription, payload) => {
+  if (!isVapidConfigured()) {
+    logger.warn('Push skipped: VAPID not configured.');
+    return false;
+  }
   try {
     await webpush.sendNotification(
       subscription.subscription,
@@ -25,16 +38,15 @@ const sendToSubscription = async (subscription, payload) => {
     return true;
   } catch (error) {
     if (error.statusCode === 410 || error.statusCode === 404) {
-      // Subscription is no longer valid - remove it
+      // Subscription expired - remove it
       await Subscription.findByIdAndDelete(subscription._id);
       logger.info(`Removed invalid subscription ${subscription._id}`);
     } else {
-      // Increment failed attempts
       await Subscription.findByIdAndUpdate(subscription._id, {
         $inc: { failedAttempts: 1 },
       });
-      // Deactivate after 5 failures
-      if (subscription.failedAttempts >= 5) {
+      // Deactivate after 5 consecutive failures
+      if (subscription.failedAttempts >= 4) {
         await Subscription.findByIdAndUpdate(subscription._id, { isActive: false });
       }
       logger.error(`Push send error for ${subscription._id}: ${error.message}`);
@@ -44,11 +56,11 @@ const sendToSubscription = async (subscription, payload) => {
 };
 
 /**
- * Send push notification to a specific user
- * @param {string} userId - MongoDB User ID
- * @param {Object} payload - Notification payload
+ * Send push notification to a specific user (all their active devices)
  */
 const sendToUser = async (userId, payload) => {
+  if (!isVapidConfigured()) return { sent: 0, total: 0 };
+
   const subscriptions = await Subscription.find({
     user: userId,
     isActive: true,
@@ -64,10 +76,10 @@ const sendToUser = async (userId, payload) => {
 
 /**
  * Broadcast push notification to multiple users
- * @param {string[]} userIds - Array of User IDs
- * @param {Object} payload - Notification payload
  */
 const broadcast = async (userIds, payload) => {
+  if (!isVapidConfigured()) return 0;
+
   const results = await Promise.allSettled(
     userIds.map((uid) => sendToUser(uid, payload))
   );
@@ -86,14 +98,14 @@ const buildPayload = (type, data = {}) => {
   const payloads = {
     emergency_request: {
       title: '🚨 Emergency Blood Needed!',
-      body: `${data.bloodGroup} blood needed ${data.distance ? data.distance + 'km' : ''} away at ${data.hospital}. Can you help?`,
+      body: `${data.bloodGroup} blood needed at ${data.hospital}. Can you help?`,
       icon: '/icons/icon-192x192.png',
       badge: '/icons/badge-72x72.png',
       tag: `emergency-${data.requestId}`,
       vibrate: [200, 100, 200, 100, 200],
       requireInteraction: true,
       data: {
-        url: `/request/${data.requestId}`,
+        url: `/requests/${data.requestId}`,
         type: 'emergency_request',
         requestId: data.requestId,
       },
@@ -103,11 +115,11 @@ const buildPayload = (type, data = {}) => {
       ],
     },
     request_matched: {
-      title: '💉 Blood Request Matched',
-      body: `Your ${data.bloodGroup} blood request has a potential donor ${data.distance}km away!`,
+      title: '💉 Donor Responded to Your Request',
+      body: `A donor ${data.distance || 'nearby'} responded to your ${data.bloodGroup} blood request at ${data.hospital}!`,
       icon: '/icons/icon-192x192.png',
       tag: `matched-${data.requestId}`,
-      data: { url: `/request/${data.requestId}`, type: 'request_matched' },
+      data: { url: `/requests/${data.requestId}`, type: 'request_matched' },
     },
     camp_reminder: {
       title: '📅 Donation Camp Reminder',
@@ -121,18 +133,22 @@ const buildPayload = (type, data = {}) => {
       body: '90 days have passed since your last donation. Lives need you!',
       icon: '/icons/icon-192x192.png',
       tag: 'eligibility',
-      data: { url: '/dashboard', type: 'eligibility_reminder' },
+      data: { url: '/donor-dashboard', type: 'eligibility_reminder' },
     },
     request_fulfilled: {
       title: '✅ Blood Request Fulfilled',
       body: `Your ${data.bloodGroup} blood request at ${data.hospital} has been fulfilled. Thank you!`,
       icon: '/icons/icon-192x192.png',
       tag: `fulfilled-${data.requestId}`,
-      data: { url: `/request/${data.requestId}`, type: 'request_fulfilled' },
+      data: { url: `/requests/${data.requestId}`, type: 'request_fulfilled' },
     },
   };
 
-  return payloads[type] || { title: 'Blood Donor Finder', body: 'New notification', icon: '/icons/icon-192x192.png' };
+  return payloads[type] || {
+    title: 'Blood Donor Finder',
+    body: 'New notification',
+    icon: '/icons/icon-192x192.png',
+  };
 };
 
-module.exports = { sendToUser, broadcast, buildPayload, sendToSubscription };
+module.exports = { sendToUser, broadcast, buildPayload, sendToSubscription, isVapidConfigured };

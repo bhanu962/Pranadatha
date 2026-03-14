@@ -4,7 +4,7 @@
  */
 const Camp = require('../models/Camp');
 const User = require('../models/User');
-const { sendToUser, broadcast, buildPayload } = require('../services/pushService');
+const { sendToUser, broadcast, buildPayload, isVapidConfigured } = require('../services/pushService');
 const logger = require('../utils/logger');
 
 // POST /api/camps - Create a camp
@@ -15,6 +15,22 @@ exports.createCamp = async (req, res) => {
       startDate, endDate, bloodGroupsNeeded, expectedDonors,
       contactPhone, contactEmail,
     } = req.body;
+
+    // Validate required location
+    if (!latitude || !longitude || isNaN(parseFloat(latitude)) || isNaN(parseFloat(longitude))) {
+      return res.status(400).json({ success: false, message: 'Valid latitude and longitude are required.' });
+    }
+
+    const parsedStart = new Date(startDate);
+    const parsedEnd = new Date(endDate);
+
+    if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid start or end date.' });
+    }
+
+    if (parsedEnd <= parsedStart) {
+      return res.status(400).json({ success: false, message: 'End date must be after start date.' });
+    }
 
     const camp = await Camp.create({
       title,
@@ -27,8 +43,8 @@ exports.createCamp = async (req, res) => {
       },
       address,
       city,
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
+      startDate: parsedStart,
+      endDate: parsedEnd,
       bloodGroupsNeeded: bloodGroupsNeeded || ['All'],
       expectedDonors: parseInt(expectedDonors) || 50,
       contactPhone,
@@ -134,24 +150,30 @@ exports.registerForCamp = async (req, res) => {
   }
 };
 
-// POST /api/camps/:id/send-reminders - Admin/organizer sends reminders
+// POST /api/camps/:id/reminders - Admin/organizer sends reminders
 exports.sendReminders = async (req, res) => {
   try {
     const camp = await Camp.findById(req.params.id).populate('registeredDonors.donor', '_id');
     if (!camp) return res.status(404).json({ success: false, message: 'Camp not found.' });
 
-    const donorIds = camp.registeredDonors.map((r) => r.donor._id.toString());
+    const donorIds = camp.registeredDonors
+      .filter((r) => r.donor && r.donor._id)
+      .map((r) => r.donor._id.toString());
+
     if (!donorIds.length) {
       return res.json({ success: true, message: 'No registered donors to notify.' });
     }
 
-    const payload = buildPayload('camp_reminder', {
-      campTitle: camp.title,
-      location: camp.address,
-      campId: camp._id.toString(),
-    });
+    let sent = 0;
+    if (isVapidConfigured()) {
+      const payload = buildPayload('camp_reminder', {
+        campTitle: camp.title,
+        location: camp.address,
+        campId: camp._id.toString(),
+      });
+      sent = await broadcast(donorIds, payload);
+    }
 
-    const sent = await broadcast(donorIds, payload);
     camp.remindersSent = true;
     await camp.save();
 

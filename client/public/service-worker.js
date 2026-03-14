@@ -206,9 +206,100 @@ self.addEventListener('sync', (event) => {
   }
 });
 
+// ── IndexedDB helpers ──────────────────────────────────────────────────────
+const DB_NAME = 'bdf-offline';
+const DB_VERSION = 1;
+const STORE_NAME = 'pending-requests';
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// Called by the app to queue an offline request for later
+async function storePendingRequest(request) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).add(request);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getAllPendingRequests() {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const req = tx.objectStore(STORE_NAME).getAll();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function deletePendingRequest(id) {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 async function syncPendingRequests() {
-  // Get pending requests from IndexedDB and retry them
   console.log('[SW] Syncing pending requests...');
+  let pending;
+  try {
+    pending = await getAllPendingRequests();
+  } catch (err) {
+    console.error('[SW] Could not read pending requests from IDB:', err);
+    return;
+  }
+
+  if (!pending || pending.length === 0) {
+    console.log('[SW] No pending requests to sync.');
+    return;
+  }
+
+  const token = await clients.matchAll({ type: 'window' }).then((cs) => {
+    // Ask any open client for the token
+    return cs[0]?.evaluate?.('localStorage.getItem("token")') || null;
+  }).catch(() => null);
+
+  for (const item of pending) {
+    try {
+      const { id, url, method = 'POST', body, headers = {} } = item;
+      const authHeaders = token
+        ? { ...headers, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }
+        : { ...headers, 'Content-Type': 'application/json' };
+
+      const response = await fetch(url, {
+        method,
+        headers: authHeaders,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      if (response.ok) {
+        await deletePendingRequest(id);
+        console.log(`[SW] Synced pending request id=${id}`);
+      } else {
+        console.warn(`[SW] Server rejected pending request id=${id}: ${response.status}`);
+      }
+    } catch (err) {
+      console.error(`[SW] Failed to sync pending request:`, err);
+      // Keep in store to retry next time
+    }
+  }
 }
 
 // ─── Message Handler ──────────────────────────────────────────────────────

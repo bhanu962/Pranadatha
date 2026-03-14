@@ -1,0 +1,66 @@
+# render.yaml — Pranadatha (render.com Blueprint)
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  # ── Backend API ────────────────────────────────────────────────────────────
+  - type: web
+    name: pranadatha-api
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_REFRESH_SECRET
+        sync: false
+      - key: JWT_EXPIRE
+        value: 7d
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_EMAIL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: 587
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: FROM_EMAIL
+        value: noreply@pranadatha.in
+      - key: FROM_NAME
+        value: Pranadatha
+      - key: CORS_ORIGIN
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: LOG_LEVEL
+        value: info
+
+  # ── Frontend (Static Site) ─────────────────────────────────────────────────
+  - type: web
+    name: pranadatha-client
+    runtime: static
+    region: singapore
+    plan: free
+    rootDir: client
+    buildCommand: npm install && npm run build
+    publishPath: ./dist
+    envVars:
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_VAPID_PUBLIC_KEY
+        sync: false

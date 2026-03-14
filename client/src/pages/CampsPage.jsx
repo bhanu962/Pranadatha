@@ -52,7 +52,9 @@ export default function CampsPage() {
   }
 
   const isRegistered = (camp) =>
-    camp.registeredDonors?.some((d) => d._id === user?._id || d === user?._id)
+    camp.registeredDonors?.some(
+      (d) => d.donor?._id === user?._id || d.donor === user?._id
+    )
 
   return (
     <div className="page-container pt-24 animate-fade-in">
@@ -97,8 +99,8 @@ export default function CampsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {camps.map((camp) => {
             const reg = isRegistered(camp)
-            const spotsLeft = (camp.maxDonors || 0) - (camp.registeredDonors?.length || 0)
-            const isFull = spotsLeft <= 0
+            const spotsLeft = (camp.expectedDonors || 0) - (camp.registeredDonors?.length || 0)
+            const isFull = camp.expectedDonors ? spotsLeft <= 0 : false
 
             return (
               <div key={camp._id} className="card-hover">
@@ -115,13 +117,13 @@ export default function CampsPage() {
                 </div>
 
                 <h3 className="font-bold text-white text-base leading-tight mb-1">{camp.title}</h3>
-                <p className="text-sm text-slate-400 mb-2">🏥 {camp.organizer}</p>
+                <p className="text-sm text-slate-400 mb-2">🏥 {camp.organizer?.name || camp.organizerName}</p>
 
                 <div className="space-y-1 text-xs text-slate-400 mb-3">
                   <p>📍 {camp.address}, {camp.city}</p>
                   <p>📅 {new Date(camp.startDate).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</p>
                   <p>🕐 {camp.startTime} – {camp.endTime}</p>
-                  {camp.maxDonors && (
+                  {camp.expectedDonors && (
                     <p className={isFull ? 'text-red-400' : spotsLeft < 10 ? 'text-amber-400' : 'text-emerald-400'}>
                       👥 {isFull ? 'Fully booked' : `${spotsLeft} spot${spotsLeft !== 1 ? 's' : ''} left`}
                     </p>

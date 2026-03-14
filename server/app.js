@@ -8,9 +8,16 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const path = require('path');
+const fs = require('fs');
 const logger = require('./utils/logger');
 
 const app = express();
+
+// ─── Ensure logs directory exists ───────────────────────────────────────────
+const logsDir = path.join(__dirname, '../logs');
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true });
+}
 
 // ─── Security Middleware ────────────────────────────────────────────────────
 app.use(
@@ -30,7 +37,7 @@ app.use(
 );
 
 // ─── CORS ───────────────────────────────────────────────────────────────────
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',');
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173').split(',').map(o => o.trim());
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -61,6 +68,7 @@ const authLimiter = rateLimit({
 app.use('/api/', generalLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/forgot-password', authLimiter);
 
 // ─── Body Parsing ───────────────────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));

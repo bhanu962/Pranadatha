@@ -1,15 +1,19 @@
 /**
- * Admin Controller
- * Analytics, user management, request moderation
+ * Admin Controller — Pranadatha
+ * Dashboard stats, user management (list, edit, delete), request moderation
  */
 const User = require('../models/User');
 const BloodRequest = require('../models/BloodRequest');
 const Donation = require('../models/Donation');
 const Camp = require('../models/Camp');
 const Subscription = require('../models/Subscription');
+const {
+  sendAccountDeletedEmail,
+  sendAccountModifiedEmail,
+} = require('../services/emailService');
 const logger = require('../utils/logger');
 
-// GET /api/admin/stats - Dashboard statistics
+// GET /api/admin/stats
 exports.getDashboardStats = async (req, res) => {
   try {
     const [
@@ -28,25 +32,19 @@ exports.getDashboardStats = async (req, res) => {
       Subscription.countDocuments({ isActive: true }),
     ]);
 
-    // Blood group breakdown
     const bloodGroupStats = await User.aggregate([
       { $match: { role: 'donor', isActive: true } },
       { $group: { _id: '$bloodGroup', count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]);
 
-    // Monthly request trend (last 6 months)
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
     const requestTrend = await BloodRequest.aggregate([
       { $match: { createdAt: { $gte: sixMonthsAgo } } },
       {
         $group: {
-          _id: {
-            year: { $year: '$createdAt' },
-            month: { $month: '$createdAt' },
-          },
+          _id: { year: { $year: '$createdAt' }, month: { $month: '$createdAt' } },
           count: { $sum: 1 },
           fulfilled: { $sum: { $cond: [{ $eq: ['$status', 'fulfilled'] }, 1, 0] } },
         },
@@ -54,7 +52,6 @@ exports.getDashboardStats = async (req, res) => {
       { $sort: { '_id.year': 1, '_id.month': 1 } },
     ]);
 
-    // Urgency breakdown
     const urgencyBreakdown = await BloodRequest.aggregate([
       { $group: { _id: '$urgencyLevel', count: { $sum: 1 } } },
     ]);
@@ -66,12 +63,9 @@ exports.getDashboardStats = async (req, res) => {
         totalRequests, activeRequests, fulfilledRequests,
         totalDonations, totalCamps, totalSubscriptions,
         fulfillmentRate: totalRequests > 0
-          ? parseFloat(((fulfilledRequests / totalRequests) * 100).toFixed(1))
-          : 0,
+          ? parseFloat(((fulfilledRequests / totalRequests) * 100).toFixed(1)) : 0,
       },
-      bloodGroupStats,
-      requestTrend,
-      urgencyBreakdown,
+      bloodGroupStats, requestTrend, urgencyBreakdown,
     });
   } catch (error) {
     logger.error(`Admin stats error: ${error.message}`);
@@ -79,7 +73,7 @@ exports.getDashboardStats = async (req, res) => {
   }
 };
 
-// GET /api/admin/users - List all users
+// GET /api/admin/users
 exports.getUsers = async (req, res) => {
   try {
     const { role, active, page = 1, limit = 20, search } = req.query;
@@ -90,26 +84,132 @@ exports.getUsers = async (req, res) => {
       query.$or = [
         { name: new RegExp(search, 'i') },
         { email: new RegExp(search, 'i') },
+        { city: new RegExp(search, 'i') },
       ];
     }
-
     const skip = (parseInt(page) - 1) * parseInt(limit);
     const [users, total] = await Promise.all([
-      User.find(query)
-        .select('-password')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
+      User.find(query).select('-password').sort({ createdAt: -1 }).skip(skip).limit(parseInt(limit)),
       User.countDocuments(query),
     ]);
-
-    res.json({ success: true, users, total, pagination: { page: parseInt(page), limit: parseInt(limit) } });
+    res.json({ success: true, users, pagination: { page: parseInt(page), limit: parseInt(limit), total } });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch users.' });
   }
 };
 
-// PUT /api/admin/users/:id/toggle-active - Activate/deactivate user
+// GET /api/admin/users/:id
+exports.getUserById = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to fetch user.' });
+  }
+};
+
+// PUT /api/admin/users/:id — Edit any user's profile
+exports.updateUser = async (req, res) => {
+  try {
+    const target = await User.findById(req.params.id);
+    if (!target) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    // Prevent editing another admin
+    if (target.role === 'admin' && target._id.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Cannot edit other admin accounts.' });
+    }
+
+    const allowed = ['name', 'email', 'phone', 'city', 'bloodGroup', 'role',
+      'isActive', 'isAvailable', 'medicalEligible', 'hospitalName'];
+    const updates = {};
+    const changeLog = {};
+
+    allowed.forEach((field) => {
+      if (req.body[field] !== undefined && req.body[field] !== target[field]) {
+        changeLog[field] = req.body[field];
+        updates[field] = req.body[field];
+      }
+    });
+
+    if (!Object.keys(updates).length) {
+      return res.json({ success: true, message: 'No changes detected.', user: target });
+    }
+
+    // Prevent demoting the last admin
+    if (updates.role && updates.role !== 'admin' && target.role === 'admin') {
+      const adminCount = await User.countDocuments({ role: 'admin' });
+      if (adminCount <= 1) {
+        return res.status(400).json({ success: false, message: 'Cannot change role: this is the only admin account.' });
+      }
+    }
+
+    const updated = await User.findByIdAndUpdate(req.params.id, updates, {
+      new: true, runValidators: true,
+    }).select('-password');
+
+    // Notify user of changes (best-effort)
+    try {
+      await sendAccountModifiedEmail(target.email, target.name, changeLog);
+    } catch (e) {
+      logger.warn(`Could not send modification email to ${target.email}: ${e.message}`);
+    }
+
+    logger.info(`Admin ${req.user.email} updated user ${target.email}: ${JSON.stringify(changeLog)}`);
+    res.json({ success: true, message: 'User updated successfully.', user: updated });
+  } catch (error) {
+    logger.error(`Update user error: ${error.message}`);
+    if (error.name === 'ValidationError') {
+      const msgs = Object.values(error.errors).map((e) => e.message);
+      return res.status(400).json({ success: false, message: msgs.join(', ') });
+    }
+    res.status(500).json({ success: false, message: 'Failed to update user.' });
+  }
+};
+
+// DELETE /api/admin/users/:id — Permanently delete a user account
+exports.deleteUser = async (req, res) => {
+  try {
+    const target = await User.findById(req.params.id);
+    if (!target) return res.status(404).json({ success: false, message: 'User not found.' });
+
+    // Cannot delete own account or another admin
+    if (target._id.toString() === req.user._id.toString()) {
+      return res.status(400).json({ success: false, message: 'You cannot delete your own account.' });
+    }
+    if (target.role === 'admin') {
+      return res.status(403).json({ success: false, message: 'Cannot delete admin accounts.' });
+    }
+
+    const { reason } = req.body;
+
+    // Clean up related data
+    await Promise.all([
+      Subscription.deleteMany({ user: target._id }),
+      BloodRequest.updateMany(
+        { requestedBy: target._id, status: 'active' },
+        { status: 'cancelled' }
+      ),
+    ]);
+
+    await User.findByIdAndDelete(target._id);
+
+    // Notify user of deletion (best-effort)
+    try {
+      await sendAccountDeletedEmail(target.email, target.name, reason);
+    } catch (e) {
+      logger.warn(`Could not send deletion email to ${target.email}: ${e.message}`);
+    }
+
+    logger.info(`Admin ${req.user.email} deleted user ${target.email} (${target.role})`);
+    res.json({ success: true, message: `Account for ${target.name} (${target.email}) has been deleted.` });
+  } catch (error) {
+    logger.error(`Delete user error: ${error.message}`);
+    res.status(500).json({ success: false, message: 'Failed to delete user.' });
+  }
+};
+
+// PUT /api/admin/users/:id/toggle-active
 exports.toggleUserActive = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -117,10 +217,8 @@ exports.toggleUserActive = async (req, res) => {
     if (user.role === 'admin') {
       return res.status(403).json({ success: false, message: 'Cannot modify admin users.' });
     }
-
     user.isActive = !user.isActive;
     await user.save({ validateBeforeSave: false });
-
     res.json({
       success: true,
       message: `User ${user.isActive ? 'activated' : 'deactivated'}.`,
@@ -131,17 +229,25 @@ exports.toggleUserActive = async (req, res) => {
   }
 };
 
-// PUT /api/admin/requests/:id/moderate - Admin moderation
+// PUT /api/admin/requests/:id/moderate
 exports.moderateRequest = async (req, res) => {
   try {
-    const { action } = req.body; // 'approve', 'reject', 'expire'
+    const { action } = req.body;
+    const validActions = ['approve', 'reject', 'expire', 'cancel', 'reactivate'];
+    if (!action || !validActions.includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid action. Must be one of: ${validActions.join(', ')}`,
+      });
+    }
     const request = await BloodRequest.findById(req.params.id);
     if (!request) return res.status(404).json({ success: false, message: 'Request not found.' });
 
-    if (action === 'expire') request.status = 'expired';
-    else if (action === 'cancel') request.status = 'cancelled';
-    else if (action === 'reactivate') request.status = 'active';
-
+    const actionStatusMap = {
+      approve: 'active', reject: 'cancelled',
+      expire: 'expired', cancel: 'cancelled', reactivate: 'active',
+    };
+    request.status = actionStatusMap[action];
     await request.save();
     res.json({ success: true, message: `Request ${action}d.`, request });
   } catch (error) {
@@ -149,22 +255,15 @@ exports.moderateRequest = async (req, res) => {
   }
 };
 
-// GET /api/admin/geographic-data - Donor distribution by city
+// GET /api/admin/geographic
 exports.getGeographicData = async (req, res) => {
   try {
     const cityDistribution = await User.aggregate([
       { $match: { role: 'donor', isActive: true, city: { $exists: true, $ne: '' } } },
-      {
-        $group: {
-          _id: '$city',
-          donors: { $sum: 1 },
-          available: { $sum: { $cond: ['$isAvailable', 1, 0] } },
-        },
-      },
+      { $group: { _id: '$city', donors: { $sum: 1 }, available: { $sum: { $cond: ['$isAvailable', 1, 0] } } } },
       { $sort: { donors: -1 } },
       { $limit: 20 },
     ]);
-
     res.json({ success: true, cityDistribution });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to fetch geographic data.' });

@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { register, login, getMe, updateProfile, changePassword, logout } = require('../controllers/authController');
+const {
+  register, login, getMe, updateProfile, changePassword, logout,
+  forgotPassword, resetPassword, verifyEmail, refreshToken,
+} = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 const { body, validationResult } = require('express-validator');
 
@@ -27,13 +30,30 @@ router.post('/login', [
   validate,
 ], login);
 
+// Token management
+router.post('/refresh', refreshToken);
+router.post('/logout', protect, logout);
+
+// Profile management
 router.get('/me', protect, getMe);
 router.put('/update-profile', protect, updateProfile);
 router.put('/change-password', protect, [
-  body('currentPassword').notEmpty(),
-  body('newPassword').isLength({ min: 8 }),
+  body('currentPassword').notEmpty().withMessage('Current password required'),
+  body('newPassword').isLength({ min: 8 }).withMessage('New password must be at least 8 characters'),
   validate,
 ], changePassword);
-router.post('/logout', protect, logout);
+
+// Password reset (no auth needed)
+router.post('/forgot-password', [
+  body('email').isEmail().normalizeEmail().withMessage('Valid email required'),
+  validate,
+], forgotPassword);
+router.put('/reset-password/:token', [
+  body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+  validate,
+], resetPassword);
+
+// Email verification
+router.get('/verify-email/:token', verifyEmail);
 
 module.exports = router;
