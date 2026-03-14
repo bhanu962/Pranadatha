@@ -1,0 +1,9 @@
+node_modules/
+.env
+logs/
+dist/
+.DS_Store
+*.log
+vapid-keys.txt
+coverage/
+.nyc_output/
